@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+*/node_modules/
+
+# Environment variables & secrets (CRITICAL: Never commit API keys)
+.env
+.env.*
+*.env
+server/.env
+client/.env
+!.env.example
+!server/.env.example
+
+# Production builds
+dist/
+client/dist/
+build/
+
+# Logs & runtime
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pm2/
+
+# OS and IDE files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Local cache
+.cache/
+.oxlintcache

@@ -1,0 +1,27 @@
+{
+  "name": "jazzhub",
+  "version": "1.0.0",
+  "description": "JazzHub - Production-Ready Full-Stack Movie Platform for AWS EC2",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node -e \"const { spawn } = require('child_process'); spawn('npm', ['run', 'dev'], { cwd: 'server', stdio: 'inherit', shell: true }); spawn('npm', ['run', 'dev'], { cwd: 'client', stdio: 'inherit', shell: true });\"",
+    "dev:server": "npm --prefix server run dev",
+    "dev:client": "npm --prefix client run dev",
+    "start": "node server/server.js",
+    "build": "npm --prefix client run build",
+    "install:all": "npm --prefix server install && npm --prefix client install"
+  },
+  "keywords": [
+    "jazzhub",
+    "tmdb",
+    "aws",
+    "ec2",
+    "nginx",
+    "pm2",
+    "react",
+    "express"
+  ],
+  "author": "JazzHub",
+  "license": "ISC"
+}
