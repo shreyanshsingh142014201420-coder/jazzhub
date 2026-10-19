@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   AlertTriangle,
@@ -10,16 +10,16 @@ import {
   Tv,
   Radio,
   Sliders,
-  CheckCircle2,
-  Maximize2
+  CheckCircle2
 } from 'lucide-react';
+import { movieApi, tvApi } from '../services/api';
 
 /**
- * Route & Parameter Normalization
- * Converts 'tv', 'series', 'show' -> 'series'
- * Maps 'movie' -> 'movie'
+ * Route & Media Type Normalization
+ * Converts 'tv', 'series', 'shows', 'show' -> 'series'
+ * Maps 'movie' or any other type -> 'movie'
  */
-const normalizeMediaType = (rawType) => {
+export const normalizeMediaType = (rawType) => {
   if (!rawType) return 'movie';
   const clean = String(rawType).toLowerCase().trim();
   if (['tv', 'series', 'shows', 'show'].includes(clean)) {
@@ -29,22 +29,21 @@ const normalizeMediaType = (rawType) => {
 };
 
 /**
- * 4-Mirror Dynamic Route Registry
+ * 4-Mirror Dynamic Gateway Registry
  * Formats URLs to target specifications:
- * 1. ShuttleTV: https://shuttletv.su/?media={normalizedType}-{id}
- * 2. FlickyStream: https://flickystream.mov/{normalizedType}/{id}
- * 3. PopcornMovies: https://popcornmovies.ac/{normalizedType}/{id}
- * 4. Failover Node 04: https://vidsrc.to/embed/{normalizedType}/{id}
+ * 1. ShuttleTV: https://shuttletv.su/?media={normalizedType}-{dynamicId}
+ * 2. FlickyStream: https://flickystream.mov/{normalizedType}/{dynamicId}
+ * 3. PopcornMovies: https://popcornmovies.ac/{normalizedType}/{dynamicId}
+ * 4. Failover Node 04: https://vidsrc.to/embed/{normalizedType}/{dynamicId}
  */
-const MIRROR_PROVIDERS = [
+export const MIRROR_PROVIDERS = [
   {
     id: 'shuttletv',
     name: 'ShuttleTV',
     domain: 'shuttletv.su',
-    resolution: '1080p Ultra',
-    cdn: 'Fast CDN',
-    status: 'Active',
-    latency: '18ms',
+    resolution: '1080p',
+    badge: 'Mirror 01',
+    status: 'Operational',
     accentBorder: 'hover:border-amber-500/60',
     badgeStyle: 'text-amber-400 border-amber-500/30 bg-amber-500/10',
     buildUrl: (type, id) => {
@@ -56,10 +55,9 @@ const MIRROR_PROVIDERS = [
     id: 'flickystream',
     name: 'FlickyStream',
     domain: 'flickystream.mov',
-    resolution: '1080p High',
-    cdn: 'Edge Tier-1',
-    status: 'Active',
-    latency: '24ms',
+    resolution: '1080p',
+    badge: 'Mirror 02',
+    status: 'Operational',
     accentBorder: 'hover:border-sky-500/60',
     badgeStyle: 'text-sky-400 border-sky-500/30 bg-sky-500/10',
     buildUrl: (type, id) => {
@@ -71,10 +69,9 @@ const MIRROR_PROVIDERS = [
     id: 'popcornmovies',
     name: 'PopcornMovies',
     domain: 'popcornmovies.ac',
-    resolution: '4K / 1080p',
-    cdn: 'Global Mesh',
-    status: 'Active',
-    latency: '31ms',
+    resolution: '4K',
+    badge: 'Mirror 03',
+    status: 'Ultra HD',
     accentBorder: 'hover:border-emerald-500/60',
     badgeStyle: 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10',
     buildUrl: (type, id) => {
@@ -86,10 +83,9 @@ const MIRROR_PROVIDERS = [
     id: 'failover-node-04',
     name: 'Failover Node 04',
     domain: 'vidsrc.to',
-    resolution: '1080p Auto',
-    cdn: 'Direct Failover',
-    status: 'Standby',
-    latency: '42ms',
+    resolution: '1080p / 4K',
+    badge: 'Failover Node',
+    status: 'Standby Mesh',
     accentBorder: 'hover:border-purple-500/60',
     badgeStyle: 'text-purple-400 border-purple-500/30 bg-purple-500/10',
     buildUrl: (type, id) => {
@@ -102,7 +98,8 @@ const MIRROR_PROVIDERS = [
 /**
  * CinemaFallbackPlayer Component
  * 
- * Production streaming player with fallback to a dark cinematic 4-mirror grid.
+ * Dynamic video player with seamless fallback to a 4-mirror gateway grid.
+ * Extracts dynamic IDs from state, props, or route params without hardcoded fallbacks.
  */
 export default function CinemaFallbackPlayer({
   playback,
@@ -110,6 +107,8 @@ export default function CinemaFallbackPlayer({
   loading = false,
   error = null,
   title = 'Now Playing',
+  movie = null,
+  movieDetails = null,
   type: propType,
   id: propId,
   poster,
@@ -117,76 +116,99 @@ export default function CinemaFallbackPlayer({
 }) {
   const params = useParams();
 
-  // Extract and normalize route parameters
+  // Dynamic TMDB ID extraction (no hardcoded test IDs)
+  const dynamicId = propId || movie?.id || movieDetails?.id || params.id || '';
+
+  // Dynamic movie title
+  const dynamicTitle = title || movie?.title || movie?.name || movieDetails?.title || movieDetails?.name || 'Now Playing';
+
+  // Route & media type normalization
   const rawType = propType || params.type || (params.season ? 'tv' : 'movie');
   const normalizedType = normalizeMediaType(rawType);
-  const resolvedId = propId || params.id || '1153576';
 
-  // Determine active media URL and type (embed vs direct stream)
-  const activeUrl = streamUrl || playback?.url;
-  const isEmbed = playback?.type === 'embed';
-  const isPlayable = Boolean(activeUrl && playback?.available !== false && !error);
+  // Internal playback fetch fallback if not supplied by parent
+  const [internalPlayback, setInternalPlayback] = useState(playback || null);
+  const [internalLoading, setInternalLoading] = useState(false);
+  const [internalError, setInternalError] = useState(null);
+
+  useEffect(() => {
+    if (playback !== undefined) {
+      setInternalPlayback(playback);
+    }
+  }, [playback]);
+
+  useEffect(() => {
+    // If playback or streamUrl was not passed externally, query service dynamically
+    if (playback === undefined && !streamUrl && dynamicId) {
+      let isMounted = true;
+      setInternalLoading(true);
+
+      const fetcher = normalizedType === 'series'
+        ? tvApi.getEpisodePlayback(dynamicId, params.season || 1, params.episode || 1)
+        : movieApi.getMoviePlayback(dynamicId);
+
+      fetcher
+        .then((data) => {
+          if (isMounted) {
+            setInternalPlayback(data);
+            setInternalLoading(false);
+          }
+        })
+        .catch((err) => {
+          if (isMounted) {
+            setInternalError(err.message || 'Stream source offline');
+            setInternalLoading(false);
+          }
+        });
+
+      return () => {
+        isMounted = false;
+      };
+    }
+  }, [playback, streamUrl, dynamicId, normalizedType, params.season, params.episode]);
+
+  // Determine active media URL and state
+  const activePlayback = playback !== undefined ? playback : internalPlayback;
+  const activeLoading = loading || internalLoading;
+  const activeError = error || internalError;
+  const activeUrl = streamUrl || activePlayback?.url;
+  const isEmbed = activePlayback?.type === 'embed';
+  const isPlayable = Boolean(activeUrl && activePlayback?.available !== false && !activeError);
 
   // View state: 'STREAM' | 'UNAVAILABLE' | 'MIRRORS'
   const [viewState, setViewState] = useState(isPlayable ? 'STREAM' : 'UNAVAILABLE');
   const [prevUrl, setPrevUrl] = useState(activeUrl);
-  const [errorMessage, setErrorMessage] = useState(error || '');
   const [isSimulatedOffline, setIsSimulatedOffline] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
 
   const videoRef = useRef(null);
   const iframeRef = useRef(null);
 
-  // Sync state when activeUrl or error prop changes
+  // Sync view state when media stream or error changes
   if (activeUrl !== prevUrl) {
     setPrevUrl(activeUrl);
     if (!isSimulatedOffline) {
       setViewState(isPlayable ? 'STREAM' : 'UNAVAILABLE');
-      setErrorMessage(error || '');
     }
   }
 
-  // Native HTML5 video error handler
-  const handleVideoError = (e) => {
-    const mediaError = e?.currentTarget?.error;
-    let desc = 'The video stream could not be loaded or the remote host failed.';
-    if (mediaError) {
-      switch (mediaError.code) {
-        case 1:
-          desc = 'Playback aborted by the browser.';
-          break;
-        case 2:
-          desc = 'Network error: Failed to download video stream.';
-          break;
-        case 3:
-          desc = 'Media decoding error or corrupted format.';
-          break;
-        case 4:
-          desc = 'Video format not supported or origin returned 404/403.';
-          break;
-        default:
-          desc = mediaError.message || desc;
-      }
-    }
-    setErrorMessage(desc);
+  // Handle native HTML5 video playback errors
+  const handleVideoError = () => {
     setViewState('UNAVAILABLE');
   };
 
-  // Iframe embed error handler
+  // Handle iframe embed errors
   const handleIframeError = () => {
-    setErrorMessage('The external embed provider refused connection or timed out.');
     setViewState('UNAVAILABLE');
   };
 
-  // Manual "Server Offline" simulator for instant verification
+  // Developer simulation toggle to verify fallback UI at any time
   const toggleSimulateOffline = () => {
     if (!isSimulatedOffline) {
       setIsSimulatedOffline(true);
-      setErrorMessage('Server Offline (Simulated Failover Triggered)');
       setViewState('UNAVAILABLE');
     } else {
       setIsSimulatedOffline(false);
-      setErrorMessage('');
       setViewState(isPlayable ? 'STREAM' : 'UNAVAILABLE');
     }
   };
@@ -207,18 +229,18 @@ export default function CinemaFallbackPlayer({
     }, 600);
   };
 
-  // Pre-generate mirror targets
+  // Memoize mirrors with dynamically computed URLs
   const mirrors = useMemo(() => {
-    return MIRROR_PROVIDERS.map((p) => ({
-      ...p,
-      url: p.buildUrl(normalizedType, resolvedId)
+    return MIRROR_PROVIDERS.map((provider) => ({
+      ...provider,
+      url: provider.buildUrl(normalizedType, dynamicId)
     }));
-  }, [normalizedType, resolvedId]);
+  }, [normalizedType, dynamicId]);
 
   return (
-    <div className="relative w-full aspect-video min-h-[380px] bg-neutral-950 border border-neutral-900 rounded-xl overflow-hidden shadow-2xl flex flex-col font-sans select-none">
+    <div className="relative w-full aspect-video min-h-[400px] bg-neutral-950 border border-neutral-900 rounded-xl overflow-hidden shadow-2xl flex flex-col font-sans select-none">
       
-      {/* Top Diagnostics & Manual Simulator Bar */}
+      {/* Top Diagnostics Bar: Live failover testing toggle */}
       <div className="absolute top-3 right-3 z-30 flex items-center gap-2">
         <button
           type="button"
@@ -228,7 +250,7 @@ export default function CinemaFallbackPlayer({
               ? 'bg-red-950/80 border-red-600/70 text-red-200'
               : 'bg-neutral-900/80 border-neutral-700/60 text-neutral-400 hover:text-white hover:border-neutral-500'
           }`}
-          title="Toggle instant failover test without waiting for network timeout"
+          title="Toggle instant failover test without waiting for connection timeout"
         >
           <Sliders className="w-3.5 h-3.5" />
           <span>{isSimulatedOffline ? 'Failover Active' : 'Simulate Failover'}</span>
@@ -236,17 +258,17 @@ export default function CinemaFallbackPlayer({
       </div>
 
       {/* ==================================================================== */}
-      {/* SCREEN 0: LOADING STATE                                              */}
+      {/* STATE 0: LOADING INDICATOR                                           */}
       {/* ==================================================================== */}
-      {loading && (
+      {activeLoading && (
         <div className="absolute inset-0 z-20 bg-neutral-950 flex flex-col items-center justify-center gap-3">
           <div className="w-10 h-10 border-2 border-red-600 border-t-transparent rounded-full animate-spin" />
-          <p className="text-sm text-neutral-400 font-mono">Initializing media pipeline...</p>
+          <p className="text-sm text-neutral-400 font-mono">Connecting to media stream...</p>
         </div>
       )}
 
       {/* ==================================================================== */}
-      {/* SCREEN 1: ACTIVE STREAM OR EMBED                                     */}
+      {/* STATE 1: ACTIVE VIDEO STREAM (HTML5 or Iframe Embed)                 */}
       {/* ==================================================================== */}
       {viewState === 'STREAM' && !isSimulatedOffline && activeUrl && (
         <div className="relative w-full h-full bg-black flex items-center justify-center">
@@ -254,7 +276,7 @@ export default function CinemaFallbackPlayer({
             <iframe
               ref={iframeRef}
               src={activeUrl}
-              title={title}
+              title={dynamicTitle}
               allowFullScreen
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               className="w-full h-full border-0"
@@ -277,31 +299,31 @@ export default function CinemaFallbackPlayer({
       )}
 
       {/* ==================================================================== */}
-      {/* SCREEN 2: "PLAYBACK UNAVAILABLE" CINEMATIC OVERLAY                   */}
+      {/* STATE 2: "PLAYBACK UNAVAILABLE" INITIAL WARNING CONTAINER            */}
       {/* ==================================================================== */}
       {(viewState === 'UNAVAILABLE' || isSimulatedOffline || !isPlayable) && (
         <div className="relative z-10 w-full h-full p-6 flex flex-col items-center justify-center text-center bg-gradient-to-b from-neutral-900 via-neutral-950 to-black animate-fade-in">
-          {/* Ambient Glow */}
-          <div className="absolute w-72 h-72 bg-red-600/10 blur-3xl rounded-full pointer-events-none -top-10" />
+          {/* Subtle Ambient Crimson Glow */}
+          <div className="absolute w-72 h-72 bg-red-600/15 blur-3xl rounded-full pointer-events-none -top-10" />
 
-          {/* Dark Red Warning Badge */}
-          <div className="w-16 h-16 mb-4 rounded-2xl bg-red-950/60 border border-red-600/50 flex items-center justify-center shadow-lg shadow-red-950/60 group">
+          {/* Crimson Warning Indicator */}
+          <div className="w-16 h-16 mb-4 rounded-2xl bg-red-950/70 border border-red-600/60 flex items-center justify-center shadow-lg shadow-red-950/80">
             <AlertTriangle className="w-8 h-8 text-red-500 animate-pulse" />
           </div>
 
-          {/* Headline & Metadata */}
+          {/* Title */}
           <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white mb-2">
             Playback Unavailable
           </h2>
-          <p className="text-sm text-neutral-400 max-w-lg leading-relaxed mb-6">
-            {errorMessage || (
-              <>
-                The primary video stream for <span className="text-neutral-100 font-semibold">{title}</span> could not be initiated or timed out.
-              </>
-            )}
+
+          {/* Subtitle displaying dynamic movie title */}
+          <p className="text-sm sm:text-base text-neutral-300 max-w-lg leading-relaxed mb-6">
+            <span className="text-neutral-400">Stream source for </span>
+            <span className="text-red-400 font-semibold">{dynamicTitle}</span>
+            <span className="text-neutral-400"> is currently unavailable or offline.</span>
           </p>
 
-          {/* Action Call-to-Actions */}
+          {/* Action CTAs */}
           <div className="flex flex-wrap items-center justify-center gap-3">
             <button
               type="button"
@@ -309,21 +331,23 @@ export default function CinemaFallbackPlayer({
               className="px-6 py-2.5 rounded-lg bg-red-600 hover:bg-red-500 active:scale-95 text-white text-sm font-semibold transition-all duration-200 shadow-xl shadow-red-600/30 flex items-center gap-2 cursor-pointer"
             >
               <Radio className="w-4 h-4 text-white" />
-              <span>Check Availability</span>
+              <span>Show Availability</span>
             </button>
 
-            <button
-              type="button"
-              onClick={handleRetry}
-              disabled={isRetrying}
-              className="px-4 py-2.5 rounded-lg bg-neutral-900/90 hover:bg-neutral-800 border border-neutral-800 text-neutral-300 hover:text-white text-sm font-medium transition-all duration-200 flex items-center gap-2 cursor-pointer disabled:opacity-50"
-            >
-              <RefreshCw className={`w-4 h-4 ${isRetrying ? 'animate-spin text-red-400' : ''}`} />
-              <span>{isRetrying ? 'Connecting...' : 'Retry Stream'}</span>
-            </button>
+            {onRetry && (
+              <button
+                type="button"
+                onClick={handleRetry}
+                disabled={isRetrying}
+                className="px-4 py-2.5 rounded-lg bg-neutral-900/90 hover:bg-neutral-800 border border-neutral-800 text-neutral-300 hover:text-white text-sm font-medium transition-all duration-200 flex items-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw className={`w-4 h-4 ${isRetrying ? 'animate-spin text-red-400' : ''}`} />
+                <span>{isRetrying ? 'Connecting...' : 'Retry Stream'}</span>
+              </button>
+            )}
           </div>
 
-          {/* Footer Routing Info */}
+          {/* Footer Routing Metadata */}
           <div className="absolute bottom-4 left-6 flex items-center gap-2 text-xs text-neutral-500 font-mono">
             {normalizedType === 'series' ? (
               <Tv className="w-3.5 h-3.5 text-neutral-400" />
@@ -331,26 +355,27 @@ export default function CinemaFallbackPlayer({
               <Film className="w-3.5 h-3.5 text-neutral-400" />
             )}
             <span className="capitalize">{normalizedType}:</span>
-            <span className="text-neutral-300">{resolvedId}</span>
+            <span className="text-neutral-300 font-semibold">{dynamicId || 'N/A'}</span>
           </div>
         </div>
       )}
 
       {/* ==================================================================== */}
-      {/* SCREEN 3: 2x2 MIRROR SELECTION GRID MATRIX                           */}
+      {/* STATE 3: EXPANDED 2x2 MIRROR SERVER CARD MATRIX                      */}
       {/* ==================================================================== */}
       {viewState === 'MIRRORS' && (
         <div className="relative z-20 w-full h-full p-5 sm:p-6 flex flex-col justify-between bg-neutral-950/98 backdrop-blur-xl animate-fade-in overflow-y-auto">
-          {/* Header Bar */}
-          <div className="flex items-center justify-between border-b border-neutral-800/80 pb-3 mb-3">
+          {/* Header Bar with Back Button */}
+          <div className="flex items-center justify-between border-b border-neutral-800/80 pb-3 mb-4">
             <div className="flex items-center gap-3">
               <button
                 type="button"
                 onClick={() => setViewState('UNAVAILABLE')}
-                className="p-1.5 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-neutral-400 hover:text-white transition-colors cursor-pointer"
+                className="p-1.5 px-3 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-neutral-300 hover:text-white transition-colors cursor-pointer flex items-center gap-1.5 text-xs font-medium"
                 title="Back to status view"
               >
                 <ArrowLeft className="w-4 h-4" />
+                <span>Back</span>
               </button>
               <div>
                 <h3 className="text-base font-bold text-white flex items-center gap-2">
@@ -360,28 +385,28 @@ export default function CinemaFallbackPlayer({
                   </span>
                 </h3>
                 <p className="text-xs text-neutral-400">
-                  Select an alternate provider node to stream {title}
+                  Select an alternate provider node to stream {dynamicTitle}
                 </p>
               </div>
             </div>
 
             <div className="hidden sm:flex items-center gap-2 text-xs font-mono text-neutral-400 bg-neutral-900/80 px-2.5 py-1 rounded-md border border-neutral-800">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-              <span>Route: {normalizedType}-{resolvedId}</span>
+              <span>Route: {normalizedType}-{dynamicId}</span>
             </div>
           </div>
 
-          {/* 2x2 Mirror Grid Matrix */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 flex-1 items-center">
+          {/* 2x2 Mirror Card Grid Matrix */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 flex-1 items-center my-2">
             {mirrors.map((mirror) => (
               <a
                 key={mirror.id}
                 href={mirror.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className={`group relative flex flex-col justify-between p-4 rounded-xl bg-neutral-900/40 hover:bg-neutral-900/90 border border-neutral-800 ${mirror.accentBorder} transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-black/70 text-left`}
+                className={`group relative flex flex-col justify-between p-4 rounded-xl bg-neutral-900/60 hover:bg-neutral-900/90 border border-neutral-800 ${mirror.accentBorder} opacity-60 hover:opacity-100 transition-opacity duration-200 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-black/70 text-left`}
               >
-                {/* Provider Header */}
+                {/* Provider Header & External Link Arrow */}
                 <div className="flex items-start justify-between mb-2">
                   <div className="flex items-center gap-2.5">
                     <div className="p-2 rounded-lg bg-neutral-950 border border-neutral-800 group-hover:border-neutral-700 transition-colors">
@@ -397,44 +422,46 @@ export default function CinemaFallbackPlayer({
                     </div>
                   </div>
 
-                  <div className="p-1 rounded-md bg-neutral-950/60 text-neutral-500 group-hover:text-white transition-colors">
+                  <div className="p-1.5 rounded-md bg-neutral-950/60 text-neutral-400 group-hover:text-white transition-colors">
                     <ExternalLink className="w-4 h-4 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
                   </div>
                 </div>
 
-                {/* Metrics & Badges */}
+                {/* Badges & Resolution */}
                 <div className="flex flex-wrap items-center justify-between gap-1.5 pt-2 border-t border-neutral-800/80 mt-1">
                   <div className="flex items-center gap-1.5">
+                    {/* Resolution Tag */}
                     <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${mirror.badgeStyle}`}>
                       {mirror.resolution}
                     </span>
+                    {/* Server Badge */}
                     <span className="text-[10px] text-neutral-400 bg-neutral-950 px-2 py-0.5 rounded-md border border-neutral-800">
-                      {mirror.cdn}
+                      {mirror.badge}
                     </span>
                   </div>
 
                   <div className="flex items-center gap-1.5 text-[11px] font-mono text-emerald-400">
                     <CheckCircle2 className="w-3 h-3 text-emerald-500" />
-                    <span>{mirror.latency}</span>
+                    <span>{mirror.status}</span>
                   </div>
                 </div>
               </a>
             ))}
           </div>
 
-          {/* Footer Controls */}
+          {/* Footer Controls with Explicit Back Button */}
           <div className="mt-3 pt-3 border-t border-neutral-800/80 flex items-center justify-between text-xs text-neutral-500">
             <button
               type="button"
               onClick={() => setViewState('UNAVAILABLE')}
-              className="inline-flex items-center gap-1 text-neutral-400 hover:text-white transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-neutral-300 hover:text-white text-xs font-medium transition-colors cursor-pointer"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
               <span>Back to status</span>
             </button>
 
             <span className="hidden sm:inline text-neutral-400">
-              Streams open in a secure external tab.
+              Streams open securely in an external tab.
             </span>
           </div>
         </div>

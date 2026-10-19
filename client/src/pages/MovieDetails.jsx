@@ -31,6 +31,28 @@ export default function MovieDetails() {
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [showPlayer, setShowPlayer] = useState(false);
+  const [playback, setPlayback] = useState(null);
+  const [playbackLoading, setPlaybackLoading] = useState(false);
+  const [playbackError, setPlaybackError] = useState(null);
+
+  const handleWatchStream = async () => {
+    setShowPlayer(true);
+    if (!playback && !playbackLoading) {
+      setPlaybackLoading(true);
+      setPlaybackError(null);
+      try {
+        const pb = await movieApi.getMoviePlayback(movie?.id || id);
+        setPlayback(pb);
+      } catch (err) {
+        setPlaybackError(err.message || 'Stream playback unavailable');
+      } finally {
+        setPlaybackLoading(false);
+      }
+    }
+    setTimeout(() => {
+      document.getElementById('cinema-player-section')?.scrollIntoView({ behavior: 'smooth' });
+    }, 80);
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -183,12 +205,7 @@ export default function MovieDetails() {
             <div className="details-poster-actions">
               <button
                 type="button"
-                onClick={() => {
-                  setShowPlayer(true);
-                  setTimeout(() => {
-                    document.getElementById('cinema-player-section')?.scrollIntoView({ behavior: 'smooth' });
-                  }, 80);
-                }}
+                onClick={handleWatchStream}
                 className="btn btn-details-watch"
               >
                 <Play size={18} fill="currentColor" />
@@ -325,10 +342,15 @@ export default function MovieDetails() {
               </button>
             </div>
             <CinemaFallbackPlayer
+              movie={movie}
               title={movie.title}
               type="movie"
-              id={movie.id}
+              id={movie.id || id}
+              playback={playback}
+              loading={playbackLoading}
+              error={playbackError}
               poster={getBackdropUrl(movie.backdrop_path || movie.backdrop)}
+              onRetry={handleWatchStream}
             />
           </div>
         )}

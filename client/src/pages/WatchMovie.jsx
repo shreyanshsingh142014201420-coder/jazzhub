@@ -7,7 +7,7 @@ import { useWatchlist } from '../context/WatchlistContext';
 import jazzhubLogo from '../assets/hero.png';
 
 export default function WatchMovie() {
-  const { id } = useParams();
+  const { id, type } = useParams();
   const navigate = useNavigate();
   const { isInWatchlist, toggleWatchlist } = useWatchlist();
 
@@ -137,12 +137,13 @@ export default function WatchMovie() {
       {/* Full-Width True Viewport Video Player Container */}
       <div className="cinema-stage-viewport">
         <CinemaFallbackPlayer
+          movie={movie}
           playback={playback}
           loading={loading || playbackLoading}
           error={error}
           title={movie?.title}
-          type="movie"
-          id={id}
+          type={type || "movie"}
+          id={movie?.id || id}
           onRetry={handleRetryPlayback}
         />
       </div>
