@@ -306,19 +306,36 @@ export default function MovieDetails() {
                   <h2 className="details-sub-heading">Starring Cast</h2>
                 </div>
                 <div className="cast-members-row">
-                  {castList.map((actor, idx) => (
-                    <div key={actor.id || idx} className="cast-member-card">
-                      <div className="cast-avatar-circle">
-                        {(actor.name || 'A').charAt(0)}
+                  {castList.map((actor, idx) => {
+                    const profileUrl = actor.profile_path ? `https://image.tmdb.org/t/p/w185${actor.profile_path}` : null;
+                    return (
+                      <div key={actor.id || idx} className="cast-member-card">
+                        <div className="cast-avatar-circle overflow-hidden bg-neutral-900 flex items-center justify-center">
+                          {profileUrl ? (
+                            <img
+                              src={profileUrl}
+                              alt={actor.name}
+                              loading="lazy"
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                e.currentTarget.style.display = 'none';
+                                if (e.currentTarget.nextSibling) e.currentTarget.nextSibling.style.display = 'flex';
+                              }}
+                            />
+                          ) : null}
+                          <span style={{ display: profileUrl ? 'none' : 'flex' }}>
+                            {(actor.name || 'A').charAt(0)}
+                          </span>
+                        </div>
+                        <div className="cast-text">
+                          <span className="cast-real-name">{actor.name}</span>
+                          {actor.character && (
+                            <span className="cast-role-name">{actor.character}</span>
+                          )}
+                        </div>
                       </div>
-                      <div className="cast-text">
-                        <span className="cast-real-name">{actor.name}</span>
-                        {actor.character && (
-                          <span className="cast-role-name">{actor.character}</span>
-                        )}
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}

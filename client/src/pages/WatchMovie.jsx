@@ -11,11 +11,71 @@ import {
   Radio,
   Server,
   ExternalLink,
-  Film
+  Users
 } from 'lucide-react';
-import { movieApi } from '../services/api';
+import { movieApi, tvApi } from '../services/api';
 import { useWatchlist } from '../context/WatchlistContext';
 import jazzhubLogo from '../assets/hero.png';
+
+/**
+ * Cast Member Avatar & Info Card
+ * Handles TMDB w185 profile photos with resilient fallback to actor initials
+ */
+function CastMemberCard({ person }) {
+  const [imgError, setImgError] = useState(false);
+  const name = typeof person === 'string' ? person : (person.name || 'Unknown');
+  const character = typeof person === 'object' ? person.character : null;
+  const profilePath = typeof person === 'object' ? person.profile_path : null;
+  const imageUrl = profilePath ? `https://image.tmdb.org/t/p/w185${profilePath}` : null;
+
+  // Compute initials for clean fallback avatar
+  const initials = (name || 'A')
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0])
+    .join('')
+    .toUpperCase();
+
+  return (
+    <div className="flex-shrink-0 w-24 sm:w-28 flex flex-col items-center text-center group select-none">
+      {/* Circular Portrait Image with Fallback */}
+      <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full overflow-hidden mb-2 bg-neutral-900 border-2 border-neutral-800 group-hover:border-red-600/70 transition-all duration-200 shadow-lg relative flex items-center justify-center">
+        {imageUrl && !imgError ? (
+          <img
+            src={imageUrl}
+            alt={name}
+            loading="lazy"
+            onError={() => setImgError(true)}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+          />
+        ) : (
+          <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-b from-neutral-800 to-neutral-950 text-neutral-300">
+            <span className="font-bold text-sm tracking-wider">{initials || 'A'}</span>
+          </div>
+        )}
+      </div>
+
+      {/* Actor's Full Name */}
+      <span
+        className="w-full text-xs sm:text-sm font-semibold text-white truncate px-1 group-hover:text-red-400 transition-colors"
+        title={name}
+      >
+        {name}
+      </span>
+
+      {/* Character / Role Name */}
+      {character && (
+        <span
+          className="w-full text-[11px] text-neutral-400 truncate px-1"
+          title={character}
+        >
+          {character}
+        </span>
+      )}
+    </div>
+  );
+}
 
 export default function WatchMovie() {
   const params = useParams();
@@ -27,13 +87,13 @@ export default function WatchMovie() {
   const extractedType = params.type || (pathParts[0] === 'watch' ? pathParts[1] : pathParts[0]) || 'movie';
   const extractedId = params.id || (pathParts[0] === 'watch' ? pathParts[2] : pathParts[1]) || '';
 
-  // Normalize: if "tv" or "series", map to "series". If "movie", keep "movie"
+  // Normalize: "tv" or "series" -> "series". "movie" -> "movie"
   const type = ['tv', 'series', 'shows', 'show'].includes(String(extractedType).toLowerCase().trim())
     ? 'series'
     : 'movie';
   const id = extractedId;
 
-  // 2. State & Interaction Flow
+  // 2. UI State
   const [showMirrors, setShowMirrors] = useState(false);
   const [movie, setMovie] = useState(null);
   const [playback, setPlayback] = useState(null);
@@ -73,19 +133,23 @@ export default function WatchMovie() {
     async function loadWatchData() {
       setLoading(true);
 
-      // Fetch Movie Metadata gracefully
+      // Fetch Metadata & Credits gracefully
       try {
-        const movieData = await movieApi.getMovieDetails(id).catch(() => null);
-        if (isMounted && movieData) {
-          setMovie(movieData);
+        const fetcher = type === 'series' ? tvApi.getTVDetails : movieApi.getMovieDetails;
+        const mediaData = await fetcher(id).catch(() => null);
+        if (isMounted && mediaData) {
+          setMovie(mediaData);
         }
       } catch (err) {
-        console.warn("Could not fetch movie details:", err);
+        console.warn("Could not fetch media details:", err);
       }
 
-      // Query Playback API
+      // Query Playback Stream
       try {
-        const pb = await movieApi.getMoviePlayback(id).catch(() => null);
+        const pbFetcher = type === 'series'
+          ? () => tvApi.getEpisodePlayback(id, 1, 1)
+          : () => movieApi.getMoviePlayback(id);
+        const pb = await pbFetcher().catch(() => null);
         if (isMounted) {
           setPlayback(pb);
         }
@@ -107,7 +171,7 @@ export default function WatchMovie() {
     return () => {
       isMounted = false;
     };
-  }, [id]);
+  }, [id, type]);
 
   const handleBack = () => {
     if (window.history.length > 2) {
@@ -133,6 +197,8 @@ export default function WatchMovie() {
 
   const releaseYear = movie?.release_date
     ? movie.release_date.substring(0, 4)
+    : movie?.first_air_date
+    ? movie.first_air_date.substring(0, 4)
     : (movie?.year || '2026');
 
   const formatRuntime = (mins) => {
@@ -149,9 +215,13 @@ export default function WatchMovie() {
     !videoError
   );
 
+  // Extract Cast list
+  const rawCast = movie?.credits?.cast || (Array.isArray(movie?.cast) ? movie.cast : []);
+  const castList = rawCast.slice(0, 20);
+
   return (
     <div className="cinema-watch-experience">
-      {/* Top Cinema Overlay Header (Desktop & Mobile) */}
+      {/* Top Cinema Header Bar */}
       <div className="cinema-top-header">
         <button
           type="button"
@@ -166,7 +236,7 @@ export default function WatchMovie() {
         <div className="cinema-title-center">
           <span className="cinema-live-dot"></span>
           <h1 className="cinema-headline-text">
-            {movie?.title || `Streaming Media #${id}`}
+            {movie?.title || movie?.name || `Streaming Media #${id}`}
           </h1>
         </div>
 
@@ -176,7 +246,7 @@ export default function WatchMovie() {
         </Link>
       </div>
 
-      {/* Main Player & Fallback Container */}
+      {/* Main Video Viewport & Fallback Container */}
       <div className="cinema-stage-viewport">
         {loading ? (
           <div className="w-full aspect-video min-h-[380px] bg-neutral-950 border border-neutral-800 rounded-xl flex flex-col items-center justify-center gap-3">
@@ -184,7 +254,7 @@ export default function WatchMovie() {
             <p className="text-sm text-neutral-400 font-mono">Initializing media pipeline...</p>
           </div>
         ) : hasPlayableStream ? (
-          /* Active Video / Iframe Embed Stream */
+          /* Active Stream (HTML5 Video or Embed) */
           <div className="relative w-full aspect-video min-h-[380px] bg-black rounded-xl overflow-hidden border border-neutral-900 shadow-2xl">
             {playback.type === 'embed' ? (
               <iframe
@@ -212,7 +282,7 @@ export default function WatchMovie() {
         ) : !showMirrors ? (
           /* Initial State: Dark container when video fails or stream is unavailable */
           <div className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-8 text-center text-white flex flex-col items-center justify-center min-h-[380px] shadow-2xl relative overflow-hidden">
-            {/* Ambient Crimson Glow */}
+            {/* Ambient Glow */}
             <div className="absolute w-72 h-72 bg-red-600/10 blur-3xl rounded-full pointer-events-none -top-10" />
 
             {/* Crimson Warning Indicator */}
@@ -227,8 +297,8 @@ export default function WatchMovie() {
 
             {/* Subtitle / Movie Info */}
             <p className="text-sm text-neutral-400 max-w-md leading-relaxed mb-6">
-              {movie?.title ? (
-                <>The primary video stream for <span className="text-neutral-100 font-semibold">{movie.title}</span> could not be loaded or is offline.</>
+              {movie?.title || movie?.name ? (
+                <>The primary video stream for <span className="text-neutral-100 font-semibold">{movie.title || movie.name}</span> could not be loaded or is offline.</>
               ) : (
                 <>The primary video stream for Media ID <span className="font-mono text-neutral-100 font-semibold">#{id}</span> could not be loaded.</>
               )}
@@ -244,7 +314,7 @@ export default function WatchMovie() {
               <span>Show Availability</span>
             </button>
 
-            {/* Media ID footer metadata */}
+            {/* Footer Metadata */}
             <div className="absolute bottom-4 left-6 flex items-center gap-2 text-xs text-neutral-500 font-mono">
               <span className="capitalize">{type}:</span>
               <span className="text-neutral-300 font-semibold">{id}</span>
@@ -344,7 +414,7 @@ export default function WatchMovie() {
         <div className="cinema-info-container">
           <div className="cinema-meta-primary">
             <h2 className="cinema-movie-title">
-              {movie?.title || `Title #${id}`}
+              {movie?.title || movie?.name || `Title #${id}`}
             </h2>
             <div className="cinema-meta-badges">
               <div className="cinema-star-rating">
@@ -411,6 +481,29 @@ export default function WatchMovie() {
         {movie?.overview && (
           <div className="cinema-synopsis-container">
             <p className="cinema-synopsis-text">{movie.overview}</p>
+          </div>
+        )}
+
+        {/* Cast & Crew Section with Profile Photos & Names */}
+        {castList && castList.length > 0 && (
+          <div className="cinema-cast-section mt-8 pt-6 border-t border-neutral-800/80">
+            <div className="flex items-center gap-2 mb-4">
+              <Users size={18} className="text-red-600" />
+              <h3 className="text-base sm:text-lg font-bold text-white tracking-wide">
+                Cast & Crew
+              </h3>
+              <span className="text-xs text-neutral-500 font-mono">({castList.length})</span>
+            </div>
+
+            {/* Horizontal Scrolling Cast Row */}
+            <div className="flex gap-4 sm:gap-5 overflow-x-auto pb-4 pt-1">
+              {castList.map((person, idx) => (
+                <CastMemberCard
+                  key={person.id || `${typeof person === 'string' ? person : person.name}-${idx}`}
+                  person={person}
+                />
+              ))}
+            </div>
           </div>
         )}
       </div>
