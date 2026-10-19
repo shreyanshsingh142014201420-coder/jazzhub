@@ -10,7 +10,7 @@ import {
   Check,
   Layers
 } from 'lucide-react';
-import VideoPlayer from '../components/VideoPlayer';
+import CinemaFallbackPlayer from '../components/CinemaFallbackPlayer';
 import { tvApi } from '../services/api';
 import { useWatchlist } from '../context/WatchlistContext';
 import jazzhubLogo from '../assets/hero.png';
@@ -174,14 +174,14 @@ export default function WatchTV() {
 
       {/* Full Viewport Cinema Video Player Frame */}
       <div className="cinema-stage-viewport">
-        <VideoPlayer
+        <CinemaFallbackPlayer
           playback={playback}
           loading={loading || playbackLoading}
           error={error}
           title={`${series?.title || series?.name || 'TV'} - S${currentSeason}E${currentEpisode}`}
+          type="series"
+          id={id}
           onRetry={handleRetryPlayback}
-          onNextEpisode={handleNextClick}
-          hasNextEpisode={Boolean(nextEpisode)}
         />
       </div>
 

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { ArrowLeft, Star, Bookmark, BookmarkCheck, Share2, Check } from 'lucide-react';
-import VideoPlayer from '../components/VideoPlayer';
+import CinemaFallbackPlayer from '../components/CinemaFallbackPlayer';
 import { movieApi } from '../services/api';
 import { useWatchlist } from '../context/WatchlistContext';
 import jazzhubLogo from '../assets/hero.png';
@@ -136,11 +136,13 @@ export default function WatchMovie() {
 
       {/* Full-Width True Viewport Video Player Container */}
       <div className="cinema-stage-viewport">
-        <VideoPlayer
+        <CinemaFallbackPlayer
           playback={playback}
           loading={loading || playbackLoading}
           error={error}
           title={movie?.title}
+          type="movie"
+          id={id}
           onRetry={handleRetryPlayback}
         />
       </div>

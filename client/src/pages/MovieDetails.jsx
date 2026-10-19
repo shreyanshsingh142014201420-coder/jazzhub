@@ -10,8 +10,10 @@ import {
   Users,
   Play,
   Sparkles,
-  AlertCircle
+  AlertCircle,
+  Maximize2
 } from 'lucide-react';
+import CinemaFallbackPlayer from '../components/CinemaFallbackPlayer';
 import MovieCard from '../components/MovieCard';
 import { SkeletonHero } from '../components/SkeletonLoader';
 import EmptyState from '../components/EmptyState';
@@ -28,6 +30,7 @@ export default function MovieDetails() {
   const [similarMovies, setSimilarMovies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [showPlayer, setShowPlayer] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -178,12 +181,27 @@ export default function MovieDetails() {
 
             {/* Quick Action Buttons */}
             <div className="details-poster-actions">
-              <Link
-                to={`/watch/movie/${movie.id}`}
+              <button
+                type="button"
+                onClick={() => {
+                  setShowPlayer(true);
+                  setTimeout(() => {
+                    document.getElementById('cinema-player-section')?.scrollIntoView({ behavior: 'smooth' });
+                  }, 80);
+                }}
                 className="btn btn-details-watch"
               >
                 <Play size={18} fill="currentColor" />
-                <span>Watch Now</span>
+                <span>Watch Stream</span>
+              </button>
+
+              <Link
+                to={`/watch/movie/${movie.id}`}
+                className="btn btn-secondary"
+                title="Full Theater Mode"
+              >
+                <Maximize2 size={16} />
+                <span>Theater</span>
               </Link>
 
               <button
@@ -289,6 +307,31 @@ export default function MovieDetails() {
             )}
           </div>
         </div>
+
+        {/* Embedded Cinema Player Section with Failover Matrix */}
+        {showPlayer && (
+          <div id="cinema-player-section" className="details-embedded-player-wrap mt-8 mb-8 animate-fade-in">
+            <div className="section-title-wrapper mb-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Sparkles size={18} className="section-icon-crimson" />
+                <h2 className="details-sub-heading text-lg font-bold text-white">Cinema Media Stream</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPlayer(false)}
+                className="text-xs text-neutral-400 hover:text-white font-mono cursor-pointer"
+              >
+                ✕ Close Player
+              </button>
+            </div>
+            <CinemaFallbackPlayer
+              title={movie.title}
+              type="movie"
+              id={movie.id}
+              poster={getBackdropUrl(movie.backdrop_path || movie.backdrop)}
+            />
+          </div>
+        )}
 
         {/* More Like This Rails */}
         {similarMovies.length > 0 && (

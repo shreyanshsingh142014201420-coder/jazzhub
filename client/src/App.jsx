@@ -50,6 +50,8 @@ export default function App() {
             <Route path="/tv/:id" element={<TVDetails />} />
             <Route path="/watch/movie/:id" element={<WatchMovie />} />
             <Route path="/watch/tv/:id/:season/:episode" element={<WatchTV />} />
+            <Route path="/watch/:type/:id" element={<WatchMovie />} />
+            <Route path="/watch/:type/:id/:season/:episode" element={<WatchTV />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </main>
