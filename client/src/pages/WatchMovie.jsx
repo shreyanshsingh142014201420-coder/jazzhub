@@ -52,17 +52,17 @@ export default function WatchMovie() {
     {
       name: 'FlickyStream',
       endpoint: '1080p High',
-      url: `https://flickystream.mov/${type}/${id}`
+      url: `http://flickystream.mov/play/${type}/${id}`
     },
     {
       name: 'PopcornMovies',
       endpoint: '4K Stream',
-      url: `https://popcornmovies.ac/${type}/${id}`
+      url: `https://popcornmovies.ac/watch/${type}/${id}`
     },
     {
-      name: 'Backup Node',
+      name: 'Backup Mirror 04',
       endpoint: '1080p Auto',
-      url: `https://vidsrc.to/embed/${type}/${id}`
+      url: `https://popcornmovies.ac/watch/${type}/${id}`
     }
   ];
 

@@ -62,7 +62,7 @@ export const MIRROR_PROVIDERS = [
     badgeStyle: 'text-sky-400 border-sky-500/30 bg-sky-500/10',
     buildUrl: (type, id) => {
       const normalizedType = normalizeMediaType(type);
-      return `https://flickystream.mov/${normalizedType}/${id}`;
+      return `http://flickystream.mov/play/${normalizedType}/${id}`;
     }
   },
   {
@@ -76,13 +76,13 @@ export const MIRROR_PROVIDERS = [
     badgeStyle: 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10',
     buildUrl: (type, id) => {
       const normalizedType = normalizeMediaType(type);
-      return `https://popcornmovies.ac/${normalizedType}/${id}`;
+      return `https://popcornmovies.ac/watch/${normalizedType}/${id}`;
     }
   },
   {
-    id: 'failover-node-04',
-    name: 'Failover Node 04',
-    domain: 'vidsrc.to',
+    id: 'backup-mirror-04',
+    name: 'Backup Mirror 04',
+    domain: 'popcornmovies.ac',
     resolution: '1080p / 4K',
     badge: 'Failover Node',
     status: 'Standby Mesh',
@@ -90,7 +90,7 @@ export const MIRROR_PROVIDERS = [
     badgeStyle: 'text-purple-400 border-purple-500/30 bg-purple-500/10',
     buildUrl: (type, id) => {
       const normalizedType = normalizeMediaType(type);
-      return `https://vidsrc.to/embed/${normalizedType}/${id}`;
+      return `https://popcornmovies.ac/watch/${normalizedType}/${id}`;
     }
   }
 ];
